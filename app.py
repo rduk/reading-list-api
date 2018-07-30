@@ -6,13 +6,13 @@ from collections import OrderedDict
 
 app = Flask(__name__)
 
-
+# getting the response
 def get_aws_data():
     aws_url = "https://s3-eu-west-1.amazonaws.com/styl-reading-list/data.json"
     response = requests.get(aws_url)
     return response.json()
 
-
+# to get pretty print json format
 def jsonify(status=200, indent=4, **kwargs):
     response = make_response(dumps(kwargs, indent=indent))
     response.headers['Content-Type'] = 'application/json; charset=utf-8'
@@ -41,7 +41,7 @@ def books_api_v1():
             order = order.upper()
         if sort in ['published_at', "name"]:
             aws_data['books'] = sorted(aws_data['books'], key=itemgetter(sort), reverse=True if order == 'DESC' else False)
-        else:
+        else:  # as the req is for only 2 sorting keys, making sure other does not sort if passed in url
             aws_data = {'msg' : 'Sorting key <{}> is not supported.'
                         'Please use only one of the sorting keys(sort=published_at or sort=name)'.format(sort)}
     # print(sort,order)
@@ -51,20 +51,26 @@ def books_api_v1():
 @app.route('/readlist/api/v1/authors')
 def authors_api_v1():
     aws_data = get_aws_data()
+    # first creating unique list of all authors, Mrs is obvoiusly consdered as one and rest of them ignoring Dr, Mr or Prof
+    # unique list = [Mrs. John Doe, John Doe, Jane Doe]
     author_list = list(set([auth['author'] if 'Mrs' in auth['author'] else
                        'Mr. ' + ' '.join(auth['author'].split()[1:]) for auth in aws_data['books']]))
     ord_dict = OrderedDict()
+    # creating a python collection/dictionary of authors
     authors_dict = dict()
     authors_dict['authors'] = list()
+    # first authors dictionary is populated with author collectons, 3 in this case
     for val in author_list:
         ord_dict = OrderedDict()
         ord_dict['name'] = val
         authors_dict['authors'].append(ord_dict)
+    # for every author we are generating book collection associated to tht author
     for author in authors_dict['authors']:
         if author.get('books'):
             continue
         else:
             author['books'] = []
+            # to ensure only unique book entry for gievn author is recorded
             for i, book_col in enumerate(aws_data['books']):
                 if 'Mrs.' in author['name']:
                     if book_col['author'] == author['name']:
@@ -73,7 +79,6 @@ def authors_api_v1():
                         continue
                 elif 'Mrs.' not in author['name'] and 'Mrs.' not in book_col['author'] and book_col['author'].split()[1:] == \
                         author['name'].split()[1:]:
-                    # if book_col['author'].split()[1:] == d['name'].split()[1:]:
                     author['books'].append(aws_data['books'][i])
     return jsonify(**authors_dict)
 
@@ -90,4 +95,4 @@ def page_not_found(e):
 
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    app.run(host='0.0.0.0')
